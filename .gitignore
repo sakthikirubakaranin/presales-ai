@@ -1,0 +1,53 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.Python
+env/
+venv/
+.venv/
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ── ChromaDB vector store (rebuild with: python3 vector_store.py build) ──────
+chroma_db/
+
+# ── Temp chart output dirs ────────────────────────────────────────────────────
+charts_*/
+*.png
+!icon.png
+!AppIcon.iconset/*.png
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# ── App build artifacts ────────────────────────────────────────────────────────
+PresalesAI.app/
+PresalesAI.dmg
+AppIcon.icns
+*.spec
+
+# ── Data files (keep sample data tracked; ignore user uploads) ────────────────
+# Comment out the lines below if you DO want to commit the sample data
+# WD Presales Demo Stats 2026.xlsx
+# WorkDrive Presales Report - April 2026.docx
+# WorkDrive Presales Report - May 2026.docx
+
+# ── Logs & temp ───────────────────────────────────────────────────────────────
+*.log
+tmp/
+temp/
