@@ -769,78 +769,151 @@ with tab_report:
     with left:
         st.markdown('<div class="section-header">Report Settings</div>', unsafe_allow_html=True)
 
-        month_opts = [str(m) for m in bundle.months if str(m).lower() != "nan"] \
-                     if bundle.months else \
-                     ["January","February","March","April","May","June",
-                      "July","August","September","October","November","December"]
+        # ── Scope selector ────────────────────────────────────────────────────
+        scope_mode = st.radio(
+            "Report scope",
+            ["By Month", "By Sheet / Tab", "Full Year (All Data)"],
+            horizontal=False,
+            key="scope_mode",
+        )
 
-        sel_month = st.selectbox("Month", month_opts, label_visibility="visible")
+        scope_type  = "month"
+        scope_value = None
 
+        if scope_mode == "By Month":
+            scope_type  = "month"
+            month_opts  = [str(m) for m in bundle.months if str(m).lower() != "nan"] \
+                          if bundle.months else \
+                          ["January","February","March","April","May","June",
+                           "July","August","September","October","November","December"]
+            scope_value = st.selectbox("Select month", month_opts)
+
+        elif scope_mode == "By Sheet / Tab":
+            scope_type  = "sheet"
+            sheet_names = [s for s in bundle.sheets.keys()
+                           if not str(s).lower().startswith("unnamed")]
+            if sheet_names:
+                scope_value = st.selectbox("Select sheet / tab", sheet_names)
+                # Show row count for selected sheet
+                if scope_value in bundle.sheets:
+                    n = len(bundle.sheets[scope_value])
+                    st.caption(f"📋 {n:,} rows in this sheet")
+            else:
+                st.info("No named sheets detected — using full dataset.")
+                scope_type  = "all"
+                scope_value = None
+
+        else:  # Full Year
+            scope_type  = "all"
+            scope_value = None
+            st.caption(f"📋 {len(bundle.df):,} total rows across all sheets")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── Template info ──────────────────────────────────────────────────────
         if template_struct["sections"]:
             sec_names = [s["heading"] for s in template_struct["sections"]]
             st.markdown(f"""
             <div class="template-bar">
-                📄 Template loaded<br>
+                📄 Template: <b>{len(sec_names)} sections</b><br>
                 <span style="font-size:11px;opacity:0.8">{" · ".join(sec_names[:3])}{"…" if len(sec_names)>3 else ""}</span>
             </div>
             """, unsafe_allow_html=True)
-
-        gen_btn = st.button("🚀 Generate Report", type="primary", use_container_width=True)
-
-    with right:
-        st.markdown('<div class="section-header">Report Contents</div>', unsafe_allow_html=True)
-        sections_info = [
-            ("📊", "Conversion Performance", "Table + Deal Won/Lost chart"),
-            ("🔄", "Repeat Engagement",       "Repeat prospects + Deal Size Distribution"),
-            ("📉", "Deal Lost Analysis",       "Loss categories table + Status donut"),
-            ("🗂", "Case Breakdown",           "New vs repeat vs existing org"),
-            ("🌍", "Region-Wise Performance",  "Table + grouped bar chart"),
-            ("🔗", "Lead Source Analysis",     "Source table + horizontal bar chart"),
-            ("⚙️", "Feature Demand",           "Top requested features table"),
-            ("✍️", "LLM Observations",         "AI-written insights for each section"),
-        ]
-        for icon, title, desc in sections_info:
-            st.markdown(f"""
-            <div style="display:flex;align-items:flex-start;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
-                <span style="font-size:18px;line-height:1.4">{icon}</span>
-                <div>
-                    <div style="font-size:13px;font-weight:600;color:#E8EAF0">{title}</div>
-                    <div style="font-size:11px;color:#8B92A5;margin-top:2px">{desc}</div>
-                </div>
+        else:
+            st.markdown("""
+            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
+                        border-radius:10px;padding:10px 14px;font-size:12px;color:#8B92A5">
+                💡 Upload a reference template in the sidebar to guide the report structure.
+                Without one, sections are auto-generated from your data.
             </div>
             """, unsafe_allow_html=True)
 
+        st.markdown("<br>", unsafe_allow_html=True)
+        gen_btn = st.button("🚀 Generate Report", type="primary", use_container_width=True)
+
+    with right:
+        st.markdown('<div class="section-header">Available Sheets / Tabs</div>',
+                    unsafe_allow_html=True)
+
+        # Show all sheets with row counts
+        all_sheets = bundle.sheets
+        if all_sheets:
+            for sname, sdf in all_sheets.items():
+                is_sel = (scope_mode == "By Sheet / Tab" and scope_value == sname) or \
+                         (scope_mode == "By Month"       and str(scope_value) == str(sname))
+                badge_color = "badge-blue" if is_sel else "badge-yellow"
+                st.markdown(f"""
+                <div style="display:flex;align-items:center;gap:12px;padding:8px 0;
+                            border-bottom:1px solid rgba(255,255,255,0.06)">
+                    <span class="badge {badge_color}">{"▶ " if is_sel else ""}{sname}</span>
+                    <span style="font-size:12px;color:#8B92A5">{len(sdf):,} rows
+                    · {len(sdf.columns)} cols</span>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.caption("No sheets info available.")
+
+        # If template loaded, show section list
+        if template_struct["sections"]:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown('<div class="section-header">Template Sections</div>',
+                        unsafe_allow_html=True)
+            icons = ["📊","🔄","📉","🗂","🌍","🔗","⚙️","✍️","📈","🔍"]
+            for i, sec in enumerate(template_struct["sections"]):
+                st.markdown(f"""
+                <div style="display:flex;align-items:center;gap:10px;padding:6px 0;
+                            border-bottom:1px solid rgba(255,255,255,0.05)">
+                    <span style="font-size:16px">{icons[i % len(icons)]}</span>
+                    <span style="font-size:13px;color:#E8EAF0">{sec['heading']}</span>
+                    {"<span class='badge badge-green' style='font-size:10px'>observation</span>" if sec.get('has_observation') else ""}
+                </div>
+                """, unsafe_allow_html=True)
+
+    # ── Generate ──────────────────────────────────────────────────────────────
     if gen_btn:
         if not alive:
             st.error("Ollama is offline. Start it with `ollama serve`.")
         else:
-            prog_bar = st.progress(0)
+            prog_bar  = st.progress(0)
             status_el = st.empty()
-
-            steps = [
-                (15, "📊 Computing statistics…"),
-                (35, "📊 Generating charts…"),
-                (60, "✍️ Writing AI observations (30–60 sec)…"),
-                (85, "📝 Building document…"),
-                (100, "✅ Done!"),
-            ]
             try:
-                for pct, msg in steps[:-1]:
-                    prog_bar.progress(pct, text=msg)
-                    status_el.info(msg)
+                prog_bar.progress(10, text="📊 Analysing data…")
+                status_el.info("Analysing data…")
 
-                docx_bytes = generate_report_bytes(bundle, sel_month, template_struct)
+                prog_bar.progress(30, text="📊 Generating charts…")
+                status_el.info("Generating charts…")
+
+                prog_bar.progress(55, text="✍️ Writing AI observations (30–90 sec)…")
+                status_el.info("Writing AI observations…")
+
+                from universal_report_generator import generate_universal_report
+                import tempfile, os
+
+                out = os.path.join(tempfile.mkdtemp(),
+                                   f"Report_{scope_value or 'All'}.docx")
+                generate_universal_report(
+                    bundle         = bundle,
+                    scope          = scope_type,
+                    scope_value    = scope_value,
+                    template_struct= template_struct,
+                    out_path       = out,
+                )
 
                 prog_bar.progress(100, text="✅ Done!")
+                docx_bytes = open(out, "rb").read()
+                os.unlink(out)
+
+                label     = scope_value or "Full Year"
+                safe_name = re.sub(r"[^\w\-_]", "_", str(label))
                 status_el.success(f"Report ready — {len(docx_bytes)//1024} KB")
 
                 st.download_button(
-                    label     = f"⬇️  Download Presales Report – {sel_month} 2026.docx",
-                    data      = docx_bytes,
-                    file_name = f"Presales_Report_{sel_month}_2026.docx",
-                    mime      = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    type      = "primary",
-                    use_container_width = True,
+                    label    = f"⬇️  Download Report — {label}.docx",
+                    data     = docx_bytes,
+                    file_name= f"Report_{safe_name}.docx",
+                    mime     = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    type     = "primary",
+                    use_container_width=True,
                 )
             except Exception as e:
                 prog_bar.empty()

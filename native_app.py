@@ -18,13 +18,168 @@ sys.path.insert(0, str(BASE_DIR))
 
 from PyQt6.QtWidgets  import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QLabel, QSplashScreen,
-                               QProgressBar, QFrame)
+                               QProgressBar, QFrame, QFileDialog)
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore    import QWebEnginePage
+from PyQt6.QtWebEngineCore    import QWebEnginePage, QWebEngineProfile, QWebEngineDownloadRequest
 from PyQt6.QtCore    import QUrl, QTimer, Qt, QThread, pyqtSignal, QSize
 from PyQt6.QtGui     import QIcon, QPixmap, QColor, QPainter, QFont, QAction
 
 _ICON_PATH = BASE_DIR / "icon.png"
+
+# ── Ollama onboarding HTML ────────────────────────────────────────────────────
+ONBOARDING_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0E1117; color: #E8EAF0;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+  }
+  .card {
+    background: #161B27; border: 1px solid rgba(79,142,247,0.25);
+    border-radius: 20px; padding: 48px 56px; max-width: 620px;
+    width: 90%; text-align: center;
+  }
+  .icon { font-size: 64px; margin-bottom: 24px; }
+  h1 { font-size: 26px; font-weight: 700; color: #E8EAF0; margin-bottom: 10px; }
+  .subtitle { color: #8B92A5; font-size: 15px; margin-bottom: 36px; line-height: 1.6; }
+  .step {
+    background: rgba(79,142,247,0.08); border: 1px solid rgba(79,142,247,0.2);
+    border-radius: 12px; padding: 18px 22px; margin-bottom: 14px;
+    display: flex; align-items: flex-start; gap: 16px; text-align: left;
+  }
+  .step-num {
+    background: #4F8EF7; color: #fff; font-weight: 700; font-size: 13px;
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .step-content h3 { font-size: 14px; font-weight: 600; color: #E8EAF0; margin-bottom: 4px; }
+  .step-content p  { font-size: 13px; color: #8B92A5; line-height: 1.5; }
+  code {
+    background: rgba(255,255,255,0.08); border-radius: 5px;
+    padding: 2px 7px; font-family: monospace; font-size: 12px; color: #4F8EF7;
+  }
+  .btn-primary {
+    display: inline-block; margin-top: 28px;
+    background: linear-gradient(135deg, #4F8EF7, #3B6FD4);
+    color: #fff; font-size: 15px; font-weight: 600;
+    padding: 13px 36px; border-radius: 10px; border: none;
+    cursor: pointer; text-decoration: none; transition: opacity 0.2s;
+  }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-secondary {
+    display: inline-block; margin-top: 14px; margin-left: 12px;
+    background: rgba(79,142,247,0.12); color: #4F8EF7;
+    border: 1px solid rgba(79,142,247,0.3);
+    font-size: 14px; font-weight: 500;
+    padding: 12px 28px; border-radius: 10px; border: none;
+    cursor: pointer; text-decoration: none; transition: all 0.2s;
+  }
+  .btn-secondary:hover { background: rgba(79,142,247,0.25); }
+  #status { margin-top: 20px; font-size: 13px; color: #8B92A5; min-height: 20px; }
+  .checking { color: #F59E0B; }
+  .ok { color: #10B981; font-weight: 600; }
+  .err { color: #EF4444; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">🧠</div>
+  <h1>Welcome to Presales AI</h1>
+  <p class="subtitle">
+    This app needs <strong>Ollama</strong> to run the AI engine locally.<br>
+    Ollama is free, runs entirely on your Mac, and keeps all your data private.
+  </p>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <h3>Download & Install Ollama</h3>
+      <p>Free macOS app — takes about 2 minutes to install.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <h3>Download the AI models</h3>
+      <p>Open Terminal and run:<br>
+        <code>ollama pull llama3.1:8b</code><br>
+        <code>ollama pull nomic-embed-text</code><br>
+        (about 5 GB total — download once, runs forever offline)
+      </p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <h3>Start Ollama, then click Continue</h3>
+      <p>Ollama runs in your menu bar. Once the icon appears, click Continue below.</p>
+    </div>
+  </div>
+
+  <div>
+    <a class="btn-primary"
+       href="https://ollama.com/download/mac"
+       onclick="this.textContent='Opening download page…'">
+      ⬇  Download Ollama for Mac
+    </a>
+    <button class="btn-secondary" onclick="checkOllama()">
+      ▶  Continue (Ollama is ready)
+    </button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<script>
+function checkOllama() {
+  var el = document.getElementById('status');
+  el.className = 'checking';
+  el.textContent = 'Checking Ollama… please wait';
+
+  fetch('http://localhost:11434/api/tags')
+    .then(function(r) {
+      if (r.ok) {
+        el.className = 'ok';
+        el.textContent = '✓ Ollama is running! Loading Presales AI…';
+        setTimeout(function() {
+          window.location.href = 'http://localhost:8501';
+        }, 1200);
+      } else {
+        throw new Error('not running');
+      }
+    })
+    .catch(function() {
+      el.className = 'err';
+      el.textContent = '✗ Ollama is not running. Start it from your Applications folder, then try again.';
+    });
+}
+
+// Auto-check every 8 seconds
+setInterval(function() {
+  fetch('http://localhost:11434/api/tags')
+    .then(function(r) {
+      if (r.ok) {
+        var el = document.getElementById('status');
+        el.className = 'ok';
+        el.textContent = '✓ Ollama detected! Loading Presales AI…';
+        setTimeout(function() {
+          window.location.href = 'http://localhost:8501';
+        }, 1200);
+      }
+    })
+    .catch(function() {});
+}, 8000);
+</script>
+</body>
+</html>
+"""
 
 
 # ── Check port free ───────────────────────────────────────────────────────────
@@ -216,6 +371,10 @@ class PresalesAIWindow(QMainWindow):
         self.webview.setStyleSheet("background:#0E1117;")
         layout.addWidget(self.webview)
 
+        # ── Download handler — saves .docx and any file downloads ────────────
+        profile = QWebEngineProfile.defaultProfile()
+        profile.downloadRequested.connect(self._on_download_requested)
+
         # Poll Ollama status every 5s
         self._ollama_timer = QTimer()
         self._ollama_timer.timeout.connect(self._check_ollama)
@@ -234,6 +393,29 @@ class PresalesAIWindow(QMainWindow):
         else:
             self.ollama_lbl.setText("● Ollama offline")
             self.ollama_lbl.setStyleSheet("color:#EF4444; font-size:11px;")
+
+    def _on_download_requested(self, download: QWebEngineDownloadRequest):
+        """Handle all file downloads from the WebView (reports, exports, etc.)."""
+        suggested = download.suggestedFileName() or "download"
+
+        # Default save path: ~/Downloads/<suggested filename>
+        downloads_dir = Path.home() / "Downloads"
+        downloads_dir.mkdir(exist_ok=True)
+        default_path  = str(downloads_dir / suggested)
+
+        # Show native macOS save dialog
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save File",
+            default_path,
+        )
+
+        if save_path:
+            download.setDownloadDirectory(str(Path(save_path).parent))
+            download.setDownloadFileName(Path(save_path).name)
+            download.accept()
+        else:
+            download.cancel()
 
     def closeEvent(self, event):
         self._thread.stop()
@@ -281,7 +463,17 @@ def main():
         splash.finish(window)
         window._add_menus()
         window.show()
-        window.webview.setUrl(QUrl(f"http://localhost:{PORT}"))
+        # Show onboarding if Ollama not installed, else go straight to app
+        try:
+            import requests as _req
+            ollama_up = _req.get("http://localhost:11434/api/tags", timeout=2).status_code == 200
+        except Exception:
+            ollama_up = False
+
+        if ollama_up:
+            window.webview.setUrl(QUrl(f"http://localhost:{PORT}"))
+        else:
+            window.webview.setHtml(ONBOARDING_HTML, QUrl("http://localhost:8501"))
 
     def on_failed(msg):
         splash.close()
