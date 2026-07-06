@@ -11,7 +11,7 @@ import sys, os, time, socket, subprocess, signal
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
-PORT     = 8501
+PORT     = 8502   # 8501 is reserved for SDLC Pipeline; Presales AI uses 8502
 
 # ── Ensure we can import our modules ─────────────────────────────────────────
 sys.path.insert(0, str(BASE_DIR))
